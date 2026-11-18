@@ -1,4 +1,5 @@
 #pragma once
+#include "v8.h"
 
 namespace Runtime {
     void ConsoleLog(const v8::FunctionCallbackInfo<v8::Value>& args);

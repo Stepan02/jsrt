@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <memory>
 #include <cstdlib>
+#include <filesystem>
 #include "v8.h"
 #include "libplatform/libplatform.h"
 #include "file/read.h"
@@ -9,6 +10,8 @@
 #include "runtime/module.h"
 
 extern char **environ;
+
+static ModuleRegistry module_registry;
 
 static int ExecuteScript(v8::Isolate *isolate, const std::string &script_name) {
     v8::Isolate::Scope isolate_scope(isolate);
@@ -103,13 +106,35 @@ static int ExecuteScript(v8::Isolate *isolate, const std::string &script_name) {
 int main(const int argc, char *argv[]) {
     // parse script file
     if (argc < 2) {
-        fprintf(stderr, "usage: %s <path>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <path>\n", argv[0]);
         return 1;
     }
 
-    // parse script
-    if (const std::string script_string = ReadFile(argv[1]); script_string.empty()) {
-        fprintf(stderr, "Could not read %s\n", argv[1]);
+    // entrypoint
+    std::string entrypoint;
+
+    // parse entrypoint and dependencies
+    for (int i = 1; i < argc; i++) {
+        std::string path = std::filesystem::path(argv[i]).lexically_normal().generic_string();
+
+        std::string script_string = ReadFile(argv[i]);
+        if (script_string.empty()) {
+            fprintf(stderr, "Could not read or empty %s\n", argv[i]);
+            return 1;
+        }
+
+        // add dependency to module registry
+        module_registry.modules[path] = script_string;
+
+        // first file of the array is entrypoint
+        if (i == 1) {
+            entrypoint = path;
+        }
+    }
+
+    // run entrypoint
+    if (module_registry.modules[entrypoint].empty()) {
+        fprintf(stderr, "Could not read %s\n", entrypoint.c_str());
         return 1;
     }
 
@@ -123,9 +148,10 @@ int main(const int argc, char *argv[]) {
     v8::Isolate::CreateParams create_params;
     create_params.array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
     v8::Isolate *isolate = v8::Isolate::New(create_params);
+    isolate->SetData(0, &module_registry);
 
     // execute the script
-    const int exit_code = ExecuteScript(isolate, argv[1]);
+    const int exit_code = ExecuteScript(isolate, entrypoint);
 
     // dispose the isolate
     isolate->Dispose();

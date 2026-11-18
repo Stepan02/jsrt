@@ -1,6 +1,13 @@
 #pragma once
 #include <string>
+#include <unordered_map>
 #include "v8.h"
+
+struct ModuleRegistry {
+    std::unordered_map<std::string, std::string> modules;
+    std::unordered_map<int, std::string> paths;
+    std::unordered_map<std::string, v8::Global<v8::Module>> module_cache;
+};
 
 void ClearModuleCache();
 
